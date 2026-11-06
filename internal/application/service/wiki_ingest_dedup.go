@@ -304,7 +304,7 @@ func (s *wikiIngestService) claimWikiIdentitySlug(
 		if authoritative {
 			authArg = "1"
 		}
-		ttlSec := int64(wikiIdentityClaimTTL / time.Second)
+		ttlSec := int64(wikiIdentityClaimTTL(s.cfg) / time.Second)
 		if ttlSec < 1 {
 			ttlSec = 1
 		}

@@ -46,6 +46,7 @@ knowledge_base:
   chunk_overlap: 50
   split_markers: ["\n\n", "\n", "。"]
   document_process_timeout: 2h
+  wiki_ingest_timeout: 60m
   image_processing:
     enable_multimodal: true
 

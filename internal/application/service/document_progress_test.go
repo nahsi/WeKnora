@@ -137,7 +137,7 @@ func TestDocumentProgressSeparatesCurrentAttemptAndFailureHistory(t *testing.T) 
 	row := addProgressPending(t, db, "doc", 2)
 	fresh := time.Now()
 	require.NoError(t, db.Model(row).Update("claimed_at", fresh).Error)
-	s := NewDocumentProgressService(db, &progressTestQueue{})
+	s := NewDocumentProgressService(nil, db, &progressTestQueue{})
 	page, err := s.List(context.Background(), DocumentProgressFilter{Status: "unfinished", Page: 1, PageSize: 25})
 	require.NoError(t, err)
 	require.Len(t, page.Documents, 1)
@@ -177,7 +177,7 @@ func TestDocumentProgressFiltersAndScopeBoundaries(t *testing.T) {
 	addProgressSpan(t, db, "waiting", 1, types.StageDocReader, types.SpanStatusDone)
 	addProgressPending(t, db, "waiting", 1)
 	addProgressSpan(t, db, "failed", 1, "postprocess.wiki", types.SpanStatusFailed)
-	s := NewDocumentProgressService(db, &progressTestQueue{})
+	s := NewDocumentProgressService(nil, db, &progressTestQueue{})
 	for _, tc := range []struct {
 		state string
 		total int64
@@ -224,7 +224,7 @@ func TestDocumentProgressHistoryIsBoundedAndDoesNotCountRecoveryAsFailure(t *tes
 		}).Error)
 	}
 	addProgressSpan(t, db, "doc", 2, "postprocess.wiki", types.SpanStatusDone)
-	s := NewDocumentProgressService(db, nil)
+	s := NewDocumentProgressService(nil, db, nil)
 	page, err := s.List(context.Background(), DocumentProgressFilter{Status: "failed", Page: 1, PageSize: 25})
 	require.NoError(t, err)
 	require.Empty(t, page.Documents)
@@ -252,7 +252,7 @@ func TestDocumentWikiStartPartialHandoffAndEligibility(t *testing.T) {
 	require.NoError(t, db.Model(&types.TaskPendingOp{}).Where("dedup_key=?", "mismatched").
 		Update("payload", json.RawMessage(`{"op":"ingest","knowledge_id":"other","attempt":2}`)).Error)
 	queue := &progressTestQueue{failAt: 1}
-	s := NewDocumentProgressService(db, queue)
+	s := NewDocumentProgressService(nil, db, queue)
 	result, err := s.StartWiki(context.Background(), DocumentWikiStartRequest{Count: 10})
 	require.Error(t, err)
 	require.Equal(t, 1, result.Started)
@@ -289,7 +289,7 @@ func TestDocumentWikiStartIsBoundedIdempotentAndRetainsDurableProgress(t *testin
 	var before []types.TaskPendingOp
 	require.NoError(t, db.Order("id").Find(&before).Error)
 	queue := &progressTestQueue{}
-	s := NewDocumentProgressService(db, queue)
+	s := NewDocumentProgressService(nil, db, queue)
 	first, err := s.StartWiki(context.Background(), DocumentWikiStartRequest{Count: 1})
 	require.NoError(t, err)
 	require.Equal(t, 1, first.Started)

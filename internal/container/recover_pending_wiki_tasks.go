@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/service"
+	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
@@ -29,7 +30,7 @@ type pendingWikiScope struct {
 // may also be absent after an interrupted Redis enqueue. Running this after all
 // handlers are registered closes that gap. Duplicate triggers are harmless:
 // ingest claims/peeks disjoint rows and finalize coalesces its pending lane.
-func recoverPendingWikiTasks(db *gorm.DB, task interfaces.TaskEnqueuer) {
+func recoverPendingWikiTasks(cfg *config.Config, db *gorm.DB, task interfaces.TaskEnqueuer) {
 	if db == nil || task == nil {
 		return
 	}
@@ -96,7 +97,7 @@ func recoverPendingWikiTasks(db *gorm.DB, task interfaces.TaskEnqueuer) {
 		opts := []asynq.Option{
 			asynq.Queue(types.QueueWiki),
 			asynq.MaxRetry(10), // keep aligned with the wiki ingest retry policy
-			asynq.Timeout(60 * time.Minute),
+			asynq.Timeout(config.WikiIngestTimeout(cfg)),
 		}
 		if scope.TaskType == types.TypeWikiFinalize {
 			opts[2] = asynq.Timeout(30 * time.Minute)

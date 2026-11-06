@@ -362,7 +362,7 @@ func TestScheduleFollowUpClaimedRowsOnlyKeepsCrashRecovery(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, tasks, 1)
 	require.Equal(t, "wiki-ingest-recheck-kb-1", tasks[0].ID)
-	require.Greater(t, time.Until(tasks[0].NextProcessAt), wikiClaimStaleAfter-time.Second)
+	require.Greater(t, time.Until(tasks[0].NextProcessAt), wikiClaimStaleAfter(nil)-time.Second)
 }
 
 func TestFollowUpReservationsKeepLongQueuedTasks(t *testing.T) {

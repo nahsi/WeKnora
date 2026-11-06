@@ -15,6 +15,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/agent"
 	apprepo "github.com/Tencent/WeKnora/internal/application/repository"
+	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/searchutil"
@@ -48,14 +49,6 @@ const (
 	// one KB, kept safe by row claiming (claimPendingList) plus per-slug
 	// reduce locks (withSlugLock). Lite mode still serializes per KB via the
 	// in-process liteLocks map.
-	//
-	// wikiClaimStaleAfter is how long a claimed-but-undrained ingest row
-	// waits before another worker may re-claim it. It MUST exceed the asynq
-	// task Timeout for wiki:ingest (60m) so a still-running batch's rows are
-	// never stolen mid-flight — only genuinely crashed/abandoned claims are
-	// recovered. This preserves the pre-claim crash behaviour where a dead
-	// batch's undeleted rows were simply re-peeked by the next trigger.
-	wikiClaimStaleAfter = 90 * time.Minute
 
 	// wikiSlugLockPrefix guards read-modify-write on a single shared wiki
 	// page (entity/concept/summary/index) so two concurrent batches for the
@@ -69,7 +62,6 @@ const (
 	// different keys. A short-lived identity claim makes both batches use
 	// the same slug before summaries and page updates are materialized.
 	wikiIdentityClaimPrefix = "wiki:identity:"
-	wikiIdentityClaimTTL    = 2 * time.Hour
 	// wikiIdentityClaimScript atomically GET-or-SET (or overwrite when
 	// ARGV[3] is "1"). A valid existing slug wins and has its TTL refreshed.
 	// Missing or corrupt values are replaced so callers cannot diverge on a
@@ -389,6 +381,7 @@ type WikiPendingOp struct {
 // both of which are correctness-critical short-lived flags rather
 // than data the system should survive without.
 type wikiIngestService struct {
+	cfg            *config.Config
 	wikiService    interfaces.WikiPageService
 	kbService      interfaces.KnowledgeBaseService
 	knowledgeSvc   interfaces.KnowledgeService
@@ -427,8 +420,28 @@ type wikiPromptWarmup struct {
 	once sync.Once
 }
 
+// wikiClaimStaleAfter is how long a claimed-but-undrained ingest row
+// waits before another worker may re-claim it. It MUST exceed the asynq
+// task timeout, so it is derived from it plus a 30 minute margin: a
+// still-running batch's rows are never stolen mid-flight, only crashed
+// or abandoned claims are recovered. This preserves the pre-claim crash
+// behaviour where a dead batch's rows were simply re-peeked by the next
+// trigger; a crashed worker's rows stay held for this long.
+func wikiClaimStaleAfter(cfg *config.Config) time.Duration {
+	return config.WikiIngestTimeout(cfg) + 30*time.Minute
+}
+
+// wikiIdentityClaimTTL keeps identity reservations alive beyond the ingest
+// task timeout. Claims are written during map and re-read at reduce, so the
+// TTL must outlive one whole batch; the hour of slack covers queueing
+// between the two phases.
+func wikiIdentityClaimTTL(cfg *config.Config) time.Duration {
+	return config.WikiIngestTimeout(cfg) + time.Hour
+}
+
 // NewWikiIngestService creates a new wiki ingest service
 func NewWikiIngestService(
+	cfg *config.Config,
 	wikiService interfaces.WikiPageService,
 	kbService interfaces.KnowledgeBaseService,
 	knowledgeSvc interfaces.KnowledgeService,
@@ -443,6 +456,7 @@ func NewWikiIngestService(
 	spanTracker SpanTracker,
 ) interfaces.TaskHandler {
 	svc := &wikiIngestService{
+		cfg:            cfg,
 		wikiService:    wikiService,
 		kbService:      kbService,
 		knowledgeSvc:   knowledgeSvc,
@@ -529,6 +543,7 @@ func enqueueWikiPendingOp(
 
 func EnqueueWikiIngest(
 	ctx context.Context,
+	cfg *config.Config,
 	task interfaces.TaskEnqueuer,
 	pendingRepo interfaces.TaskPendingOpsRepository,
 	tenantID uint64,
@@ -553,7 +568,7 @@ func EnqueueWikiIngest(
 		logger.Infof(ctx, "wiki ingest: skip enqueue for deleted KB %s", kbID)
 		return false, nil
 	}
-	if err := enqueueWikiIngestTrigger(ctx, task, tenantID, kbID); err != nil {
+	if err := enqueueWikiIngestTrigger(ctx, cfg, task, tenantID, kbID); err != nil {
 		return true, err
 	}
 	return true, nil
@@ -613,6 +628,7 @@ func newWikiIngestPendingOp(
 
 func enqueueWikiIngestTrigger(
 	ctx context.Context,
+	cfg *config.Config,
 	task interfaces.TaskEnqueuer,
 	tenantID uint64,
 	kbID string,
@@ -636,7 +652,7 @@ func enqueueWikiIngestTrigger(
 	t := asynq.NewTask(types.TypeWikiIngest, triggerBytes,
 		asynq.Queue(types.QueueWiki),
 		asynq.MaxRetry(wikiIngestMaxRetry),
-		asynq.Timeout(60*time.Minute),
+		asynq.Timeout(config.WikiIngestTimeout(cfg)),
 		asynq.ProcessIn(wikiIngestDelay),
 	)
 	if _, err := task.Enqueue(t); err != nil {
@@ -653,14 +669,15 @@ func enqueueWikiIngestTrigger(
 // because there is no "user upload arriving in waves" pattern to
 // debounce against — a deletion fires once and we want the cleanup
 // to land promptly.
-func EnqueueWikiRetract(ctx context.Context, task interfaces.TaskEnqueuer,
+func EnqueueWikiRetract(ctx context.Context, cfg *config.Config, task interfaces.TaskEnqueuer,
 	pendingRepo interfaces.TaskPendingOpsRepository, payload WikiRetractPayload,
 ) {
-	_ = enqueueWikiRetract(ctx, task, pendingRepo, payload)
+	_ = enqueueWikiRetract(ctx, cfg, task, pendingRepo, payload)
 }
 
 func enqueueWikiRetract(
 	ctx context.Context,
+	cfg *config.Config,
 	task interfaces.TaskEnqueuer,
 	pendingRepo interfaces.TaskPendingOpsRepository,
 	payload WikiRetractPayload,
@@ -707,7 +724,7 @@ func enqueueWikiRetract(
 	t := asynq.NewTask(types.TypeWikiIngest, triggerBytes,
 		asynq.Queue(types.QueueWiki),
 		asynq.MaxRetry(wikiIngestMaxRetry),
-		asynq.Timeout(60*time.Minute),
+		asynq.Timeout(config.WikiIngestTimeout(cfg)),
 		asynq.ProcessIn(5*time.Second), // Retract can trigger the batch quickly
 	)
 	if _, err := task.Enqueue(t); err != nil {
@@ -785,7 +802,7 @@ func (s *wikiIngestService) releaseIngestForUnavailableWiki(ctx context.Context,
 	cleanupCtx, cancel := wikiIngestCleanupContext(ctx)
 	defer cancel()
 	knowledgeIDs, err := drainer.DrainUnclaimedAndRelease(cleanupCtx, wikiTaskType, wikiTaskScope, kbID,
-		WikiOpIngest, time.Now().Add(-wikiClaimStaleAfter))
+		WikiOpIngest, time.Now().Add(-wikiClaimStaleAfter(s.cfg)))
 	if err != nil {
 		return fmt.Errorf("wiki ingest: KB %s unavailable (%s), drain pending ingest: %w", kbID, reason, err)
 	}
@@ -983,7 +1000,7 @@ func (s *wikiIngestService) claimPendingList(ctx context.Context, kbID string, l
 		limit = wikiMaxDocsPerBatch
 	}
 	rows, err := s.pendingRepo.ClaimBatch(ctx, wikiTaskType, wikiTaskScope, kbID, limit,
-		time.Now().Add(-wikiClaimStaleAfter))
+		time.Now().Add(-wikiClaimStaleAfter(s.cfg)))
 	if err != nil {
 		// A claim failure is transient (DB blip). Propagate it so the batch
 		// returns an error and asynq retries, instead of acking the trigger
@@ -1154,7 +1171,7 @@ func (s *wikiIngestService) scheduleCappedRetry(ctx context.Context, payload Wik
 	t := asynq.NewTask(types.TypeWikiIngest, b,
 		asynq.Queue(types.QueueWiki),
 		asynq.MaxRetry(wikiIngestMaxRetry),
-		asynq.Timeout(60*time.Minute),
+		asynq.Timeout(config.WikiIngestTimeout(s.cfg)),
 		asynq.ProcessIn(wikiInflightBackoff),
 		asynq.TaskID("wiki-ingest-capped-"+payload.KnowledgeBaseID),
 	)
@@ -1196,8 +1213,8 @@ func (s *wikiIngestService) scheduleStaleClaimRecheck(ctx context.Context, paylo
 	t := asynq.NewTask(types.TypeWikiIngest, b,
 		asynq.Queue(types.QueueWiki),
 		asynq.MaxRetry(wikiIngestMaxRetry),
-		asynq.Timeout(60*time.Minute),
-		asynq.ProcessIn(wikiClaimStaleAfter+wikiFollowUpDelay),
+		asynq.Timeout(config.WikiIngestTimeout(s.cfg)),
+		asynq.ProcessIn(wikiClaimStaleAfter(s.cfg)+wikiFollowUpDelay),
 		asynq.TaskID("wiki-ingest-recheck-"+payload.KnowledgeBaseID),
 	)
 	if _, err := s.task.Enqueue(t); err != nil {

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
 	"github.com/Tencent/WeKnora/internal/types"
@@ -137,7 +138,7 @@ func (s *wikiIngestService) scheduleFollowUpRecheck(ctx context.Context, payload
 	t := asynq.NewTask(types.TypeWikiIngest, b,
 		asynq.Queue(types.QueueWiki),
 		asynq.MaxRetry(wikiIngestMaxRetry),
-		asynq.Timeout(60*time.Minute),
+		asynq.Timeout(config.WikiIngestTimeout(s.cfg)),
 		asynq.ProcessIn(wikiFollowUpReconcileAfter+wikiFollowUpDelay),
 		asynq.TaskID(id),
 	)

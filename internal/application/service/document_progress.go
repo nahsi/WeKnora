@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/Tencent/WeKnora/internal/types/interfaces"
 	"gorm.io/gorm"
@@ -15,13 +16,16 @@ import (
 
 // DocumentProgressService joins existing durable state for the system task console.
 type DocumentProgressService struct {
+	cfg  *config.Config
 	db   *gorm.DB
 	task interfaces.TaskEnqueuer
 }
 
 // NewDocumentProgressService uses the existing queue and processing tables without a separate progress store.
-func NewDocumentProgressService(db *gorm.DB, task interfaces.TaskEnqueuer) *DocumentProgressService {
-	return &DocumentProgressService{db: db, task: task}
+func NewDocumentProgressService(
+	cfg *config.Config, db *gorm.DB, task interfaces.TaskEnqueuer,
+) *DocumentProgressService {
+	return &DocumentProgressService{cfg: cfg, db: db, task: task}
 }
 
 // DocumentProgressFilter selects documents independently of the live Redis queues.
@@ -287,7 +291,7 @@ func (s *DocumentProgressService) list(
 		Retries int
 		Claimed int
 	}
-	stale := time.Now().Add(-wikiClaimStaleAfter)
+	stale := time.Now().Add(-wikiClaimStaleAfter(s.cfg))
 	if err := s.db.WithContext(ctx).Table("knowledges k").
 		Select(`k.id,COUNT(*) AS pending,MAX(p.fail_count) AS retries,
 			MAX(CASE WHEN p.claimed_at>=? OR EXISTS(SELECT 1 FROM task_pending_ops held

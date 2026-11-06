@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Tencent/WeKnora/internal/application/access"
+	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/infrastructure/docparser"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
@@ -21,6 +22,7 @@ import (
 // KnowledgePostProcessService acts as an orchestrator for all post-processing tasks
 // after a document has been parsed and split into chunks (including multimodal OCR/Caption).
 type KnowledgePostProcessService struct {
+	cfg           *config.Config
 	knowledgeRepo interfaces.KnowledgeRepository
 	kbService     interfaces.KnowledgeBaseService
 	chunkService  interfaces.ChunkService
@@ -32,6 +34,7 @@ type KnowledgePostProcessService struct {
 }
 
 func NewKnowledgePostProcessService(
+	cfg *config.Config,
 	knowledgeRepo interfaces.KnowledgeRepository,
 	kbService interfaces.KnowledgeBaseService,
 	chunkService interfaces.ChunkService,
@@ -42,6 +45,7 @@ func NewKnowledgePostProcessService(
 	spanTracker SpanTracker,
 ) interfaces.TaskHandler {
 	return &KnowledgePostProcessService{
+		cfg:           cfg,
 		knowledgeRepo: knowledgeRepo,
 		kbService:     kbService,
 		chunkService:  chunkService,
@@ -273,7 +277,9 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 		// A previous delivery may have persisted the Wiki op but failed to
 		// enqueue its KB-scoped trigger. Retry only the trigger: appending a
 		// second pending op would duplicate durable work and its finalizer.
-		if err := enqueueWikiIngestTrigger(ctx, s.taskEnqueuer, payload.TenantID, payload.KnowledgeBaseID); err != nil {
+		if err := enqueueWikiIngestTrigger(
+			ctx, s.cfg, s.taskEnqueuer, payload.TenantID, payload.KnowledgeBaseID,
+		); err != nil {
 			s.tracker().FailSpanRetryable(ctx, postSpan, "WIKI_TRIGGER_ENQUEUE_FAILED", err.Error(), err)
 			return fmt.Errorf("retry wiki ingest trigger: %w", err)
 		}
@@ -442,7 +448,7 @@ func (s *KnowledgePostProcessService) Handle(ctx context.Context, task *asynq.Ta
 	var wikiEnqueueErr error
 	if willSpawnWiki {
 		wikiEnqueueErr = enqueueWikiIngestTrigger(
-			ctx, s.taskEnqueuer, payload.TenantID, payload.KnowledgeBaseID,
+			ctx, s.cfg, s.taskEnqueuer, payload.TenantID, payload.KnowledgeBaseID,
 		)
 		if wikiEnqueueErr != nil {
 			logger.Warnf(ctx, "[KnowledgePostProcess] Failed to enqueue wiki ingest for %s: %v",

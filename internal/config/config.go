@@ -218,6 +218,7 @@ type KnowledgeBaseConfig struct {
 	KeepSeparator          bool                   `yaml:"keep_separator"   json:"keep_separator"`
 	ImageProcessing        *ImageProcessingConfig `yaml:"image_processing" json:"image_processing"`
 	DocumentProcessTimeout time.Duration          `yaml:"document_process_timeout"  json:"document_process_timeout"`
+	WikiIngestTimeout      time.Duration          `yaml:"wiki_ingest_timeout"  json:"wiki_ingest_timeout"`
 	// DocReaderCallTimeout caps a single DocReader RPC. Without this the
 	// gRPC call inherits the asynq task context (whole DocumentProcessTimeout,
 	// default 2h+), so a hung docreader would block a worker for hours and
@@ -237,6 +238,19 @@ func DocumentProcessTimeout(cfg *Config) time.Duration {
 		return cfg.KnowledgeBase.DocumentProcessTimeout
 	}
 	return DefaultDocumentProcessTimeout
+}
+
+// DefaultWikiIngestTimeout is the timeout for a wiki ingest task when
+// wiki_ingest_timeout is unset or non-positive.
+const DefaultWikiIngestTimeout = 60 * time.Minute
+
+// WikiIngestTimeout returns the effective wiki ingest task timeout.
+// Partial configs (e.g. unit tests) receive the default when unset.
+func WikiIngestTimeout(cfg *Config) time.Duration {
+	if cfg != nil && cfg.KnowledgeBase != nil && cfg.KnowledgeBase.WikiIngestTimeout > 0 {
+		return cfg.KnowledgeBase.WikiIngestTimeout
+	}
+	return DefaultWikiIngestTimeout
 }
 
 // ImageProcessingConfig 图像处理配置
@@ -829,6 +843,14 @@ func applyKnowledgeBaseEnvOverrides(cfg *Config) {
 	if value := strings.TrimSpace(os.Getenv("WEKNORA_DOCREADER_CALL_TIMEOUT")); value != "" {
 		if d, err := time.ParseDuration(value); err == nil && d > 0 {
 			cfg.KnowledgeBase.DocReaderCallTimeout = d
+		}
+	}
+	if cfg.KnowledgeBase.WikiIngestTimeout <= 0 {
+		cfg.KnowledgeBase.WikiIngestTimeout = DefaultWikiIngestTimeout
+	}
+	if value := strings.TrimSpace(os.Getenv("WEKNORA_WIKI_INGEST_TIMEOUT")); value != "" {
+		if d, err := time.ParseDuration(value); err == nil && d > 0 {
+			cfg.KnowledgeBase.WikiIngestTimeout = d
 		}
 	}
 }

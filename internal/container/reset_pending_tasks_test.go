@@ -351,7 +351,7 @@ func TestRecoverPendingWikiTasks_RecreatesOneTriggerPerLaneAndKB(t *testing.T) {
 	}
 
 	recorder := &recordingTaskEnqueuer{}
-	recoverPendingWikiTasks(db, recorder)
+	recoverPendingWikiTasks(nil, db, recorder)
 	require.Len(t, recorder.tasks, 3)
 
 	seen := map[string]service.WikiIngestPayload{}

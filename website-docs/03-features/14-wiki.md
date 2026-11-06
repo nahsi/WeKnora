@@ -126,6 +126,7 @@ Wiki 曾经维护一份独立的操作日志（`wiki_log_entries` 表 + `GET /wi
 - **租户已删除**：ingest / finalize 任务在调用模型前检查租户是否存活，租户已删除则丢弃该知识库的队列，不再产生模型请求；
 - **Wiki 无法运行**：触发时发现知识库已关闭 Wiki、没有合成模型或模型已被删除，会清空尚未认领的 ingest 操作并释放对应文档，文档不会一直停在「索引中」；
 - **触发任务丢失**：只有持久化操作、没有触发任务的知识库由后台巡检重新触发，每个知识库每个巡检阈值周期最多一次；
+- **Worker 崩溃**：已认领的 ingest 操作在配置的 ingest 超时再加 30 分钟后可被重新认领。超时由部署级 `knowledge_base.wiki_ingest_timeout` 配置，环境变量 `WEKNORA_WIKI_INGEST_TIMEOUT` 可覆盖，使用 Go duration，默认 `60m`；
 - **瞬时错误重试**：模型调用遇到 408/429/5xx、超时、连接重置，或带有限流字样（如「调用频率超限」、`rate limit`）的 403 时按指数退避重试；鉴权类 403 不重试；
 - **失败次数优先级**：认领待处理文档时优先处理失败次数少的文档，反复失败的文档不会阻塞新文档。
 
@@ -277,6 +278,8 @@ TypeWikiFinalize = "wiki:finalize"
 | `IngestMapParallel` | 10 | Map 阶段（每文档抽取+引文）errgroup 并发数 |
 | `IngestReduceParallel` | 10 | Reduce 阶段（每 slug 写页面）并发数 |
 | `IngestMaxInflight` | 4 | 同一 KB 最大并发批次（保证跨 KB 公平） |
+
+批次超时不在 `WikiConfig` 中，由部署级 `knowledge_base.wiki_ingest_timeout`（env `WEKNORA_WIKI_INGEST_TIMEOUT`，默认 60m）统一控制。
 
 目录规划阶段计算文件夹与条目的 embedding 时，和其他 embedding 调用一样按 `BATCH_EMBED_SIZE` 分批请求，不会因单次输入过多被模型服务拒绝。
 

@@ -343,6 +343,8 @@ services:
       - WEKNORA_DOCUMENT_PROCESS_TIMEOUT=${WEKNORA_DOCUMENT_PROCESS_TIMEOUT:-}
       # 单次 DocReader RPC 超时（默认 30m，须小于上一项）
       - WEKNORA_DOCREADER_CALL_TIMEOUT=${WEKNORA_DOCREADER_CALL_TIMEOUT:-}
+      # Wiki ingest 任务总超时（部署级 Go duration，默认 60m）
+      - WEKNORA_WIKI_INGEST_TIMEOUT=${WEKNORA_WIKI_INGEST_TIMEOUT:-}
       # 自建 PaddleOCR-VL HTTP 请求超时（Go duration，默认 1000s）
       - WEKNORA_PADDLEOCR_VL_TIMEOUT=${WEKNORA_PADDLEOCR_VL_TIMEOUT:-}
       # 自建 MinerU 单次解析超时（Go duration，默认 1000s）

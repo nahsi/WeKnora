@@ -95,6 +95,7 @@ flowchart LR
 | `keep_separator` | bool | false | 保留分隔符 |
 | `document_process_timeout` | duration | 2h | 单文档处理任务总超时（env `WEKNORA_DOCUMENT_PROCESS_TIMEOUT` 可覆盖） |
 | `docreader_call_timeout` | duration | 30m | 单次 DocReader RPC 超时（env `WEKNORA_DOCREADER_CALL_TIMEOUT`），须小于上一项 |
+| `wiki_ingest_timeout` | duration | 60m | 部署级 Wiki ingest 任务总超时（env `WEKNORA_WIKI_INGEST_TIMEOUT` 可覆盖），不按知识库单独配置 |
 | `image_processing.enable_multimodal` | bool | true | 上传时启用图片多模态处理（OCR/Caption） |
 
 > 每个知识库的 `ChunkingConfig` 会覆盖这里的全局默认值。
@@ -327,6 +328,7 @@ AWS S3 的 `S3_ACCESS_KEY` / `S3_SECRET_KEY` 可以**同时留空**，此时走 
 | `WEKNORA_CHAT_ATTACHMENT_TTL_HOURS` / `_WAIT_TIMEOUT_SEC` / `_OCR_CONCURRENCY` / `_OCR_MAX_PAGES` | 24 / 60 / 8 / 8 | 未被有效会话消息引用的附件保留时长、读取解析等待超时与 OCR 并发/页数上限；已发送附件在原会话或分叉会话仍引用时不因 TTL 清理 |
 | `WEKNORA_HOUSEKEEPING_ENABLED` | 启用 | 回收卡在 processing 的脏数据 |
 | `WEKNORA_DOCUMENT_PROCESS_TIMEOUT` / `WEKNORA_DOCREADER_CALL_TIMEOUT` | 2h / 30m | 文档处理任务与单次 RPC 超时 |
+| `WEKNORA_WIKI_INGEST_TIMEOUT` | 60m | 部署级 Wiki ingest 任务总超时，覆盖 `knowledge_base.wiki_ingest_timeout`，支持 Go duration；空值、无效值或非正数忽略，修改后需重启 |
 | `WEKNORA_PADDLEOCR_VL_TIMEOUT` | 1000s | 自建 PaddleOCR-VL HTTP 请求超时，支持正数 Go duration（如 `5400s`、`90m`）；空值、无效值或非正数使用默认值。外层超时需留余量，例如本项 `90m`、DocReader `100m`、文档任务 `2h` |
 | `WEKNORA_MINERU_TIMEOUT` | 1000s | 自建 MinerU 单次解析超时（V1 API 为整个解析任务，旧版为 `/file_parse` 请求），格式与默认值规则同上；超大 PDF 同样需要外层超时留余量 |
 | `WEKNORA_MINERU_CLOUD_TIMEOUT` | 30m | MinerU 云端（mineru.net）每个批次/分片轮询解析结果的最长时间，格式与默认值规则同上 |

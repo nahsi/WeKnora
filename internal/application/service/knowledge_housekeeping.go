@@ -835,7 +835,7 @@ func (h *HousekeepingService) rearmWikiTriggers(
 		if lang := WikiPendingLanguage(ctx, h.db, k.TenantID, k.KnowledgeBaseID); lang != "" {
 			triggerCtx = context.WithValue(ctx, types.LanguageContextKey, lang)
 		}
-		if err := enqueueWikiIngestTrigger(triggerCtx, h.task, k.TenantID, k.KnowledgeBaseID); err != nil {
+		if err := enqueueWikiIngestTrigger(triggerCtx, h.cfg, h.task, k.TenantID, k.KnowledgeBaseID); err != nil {
 			logger.Warnf(ctx, "[Housekeeping] re-arm wiki trigger for KB %s failed: %v", k.KnowledgeBaseID, err)
 			continue
 		}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/Tencent/WeKnora/internal/agent"
 	apprepo "github.com/Tencent/WeKnora/internal/application/repository"
+	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/logger"
 	"github.com/Tencent/WeKnora/internal/models/chat"
 	"github.com/Tencent/WeKnora/internal/tracing/langfuse"
@@ -64,7 +65,7 @@ func (s *wikiIngestService) scheduleFollowUp(
 	if s.redisClient != nil {
 		if counter, ok := s.pendingRepo.(interfaces.TaskPendingOpsClaimableCounter); ok {
 			count, err = counter.ClaimableCount(ctx, wikiTaskType, wikiTaskScope,
-				payload.KnowledgeBaseID, time.Now().Add(-wikiClaimStaleAfter))
+				payload.KnowledgeBaseID, time.Now().Add(-wikiClaimStaleAfter(s.cfg)))
 			if err != nil {
 				logger.Warnf(ctx, "wiki ingest: claimable count failed: %v", err)
 				return s.scheduleFollowUpRecheck(ctx, payload)
@@ -110,7 +111,7 @@ func (s *wikiIngestService) scheduleFollowUp(
 		opts := []asynq.Option{
 			asynq.Queue(types.QueueWiki),
 			asynq.MaxRetry(wikiIngestMaxRetry),
-			asynq.Timeout(60 * time.Minute),
+			asynq.Timeout(config.WikiIngestTimeout(s.cfg)),
 			asynq.ProcessIn(delay),
 		}
 		if len(taskIDs) > 0 {
@@ -400,7 +401,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 			return errors.New("wiki manual mode requires unclaimed operation cleanup")
 		}
 		return discarder.DiscardUnclaimed(ctx, wikiTaskType, wikiTaskScope, kb.ID,
-			WikiOpRetract, time.Now().Add(-wikiClaimStaleAfter))
+			WikiOpRetract, time.Now().Add(-wikiClaimStaleAfter(s.cfg)))
 	}
 
 	var synthesisModelID string
@@ -476,7 +477,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 			return errors.New("wiki ingest: selected document claims are unavailable")
 		}
 		rows, err := claimer.ClaimKnowledge(ctx, wikiTaskType, wikiTaskScope, payload.KnowledgeBaseID,
-			payload.KnowledgeID, time.Now().Add(-wikiClaimStaleAfter))
+			payload.KnowledgeID, time.Now().Add(-wikiClaimStaleAfter(s.cfg)))
 		loadErr = err
 		if err == nil {
 			pendingOps, peekedIDs = s.decodePendingRows(ctx, rows)
@@ -524,7 +525,7 @@ func (s *wikiIngestService) ProcessWikiIngest(ctx context.Context, t *asynq.Task
 	// abnormally — panic, ctx timeout, or an early error return — BEFORE it
 	// settles its claimed rows (trim + requeueFailedOps), release the claims
 	// so the next trigger can re-claim within seconds instead of waiting out
-	// wikiClaimStaleAfter (~90m). On the normal path claimsSettled flips true
+	// wikiClaimStaleAfter (90m by default). On the normal path claimsSettled flips true
 	// once the rows reach their terminal state, making this a no-op. Uses a
 	// bounded detached cleanup context because ctx may already be cancelled on
 	// the timeout path. Ordinary Lite batches peek without claiming.

@@ -1307,7 +1307,9 @@ func (s *knowledgeService) moveOneKnowledge(
 				return s.enqueueMovedKnowledge(ctx, knowledge, sourceKB, targetKB)
 			}
 			if mode == "reuse_vectors" && targetKB.IsWikiAutoGenerateEnabled() {
-				_, err := EnqueueWikiIngest(ctx, s.task, s.taskPendingRepo, tenantID, targetKB.ID, knowledge.ID)
+				_, err := EnqueueWikiIngest(
+					ctx, s.config, s.task, s.taskPendingRepo, tenantID, targetKB.ID, knowledge.ID,
+				)
 				return err
 			}
 			return nil
@@ -1354,7 +1356,9 @@ func (s *knowledgeService) moveOneKnowledge(
 		// land; reuse_vectors keeps the existing chunks and never re-enters that
 		// pipeline, so the target KB has to be told about the document here.
 		if targetKB.IsWikiAutoGenerateEnabled() {
-			_, err := EnqueueWikiIngest(ctx, s.task, s.taskPendingRepo, tenantID, targetKB.ID, knowledge.ID)
+			_, err := EnqueueWikiIngest(
+				ctx, s.config, s.task, s.taskPendingRepo, tenantID, targetKB.ID, knowledge.ID,
+			)
 			return err
 		}
 		return nil

@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/Tencent/WeKnora/internal/config"
 	"github.com/Tencent/WeKnora/internal/types"
 	"github.com/hibiken/asynq"
 )
@@ -55,7 +56,7 @@ func (s *DocumentProgressService) StartWiki(
 		Where(s.wikiEnabledSQL()).
 		Where(`NOT EXISTS(SELECT 1 FROM task_pending_ops held WHERE held.task_type=p.task_type
 			AND held.scope=p.scope AND held.scope_id=p.scope_id AND held.dedup_key=p.dedup_key
-			AND held.claimed_at>=?)`, time.Now().Add(-wikiClaimStaleAfter))
+			AND held.claimed_at>=?)`, time.Now().Add(-wikiClaimStaleAfter(s.cfg)))
 	if request.KnowledgeID != "" {
 		query = query.Where("k.id=?", request.KnowledgeID)
 	}
@@ -86,7 +87,7 @@ func (s *DocumentProgressService) StartWiki(
 			candidate.TenantID, candidate.KnowledgeBaseID, candidate.ID, candidate.AnchorID)
 		digest := sha256.Sum256([]byte(identity))
 		task := asynq.NewTask(types.TypeWikiIngest, raw, asynq.Queue(types.QueueWiki),
-			asynq.MaxRetry(wikiIngestMaxRetry), asynq.Timeout(time.Hour))
+			asynq.MaxRetry(wikiIngestMaxRetry), asynq.Timeout(config.WikiIngestTimeout(s.cfg)))
 		_, err = s.task.Enqueue(task, asynq.TaskID(fmt.Sprintf("wiki-start-%x", digest[:16])))
 		if errors.Is(err, asynq.ErrTaskIDConflict) || errors.Is(err, asynq.ErrDuplicateTask) {
 			result.AlreadyQueued++

@@ -436,7 +436,8 @@ func TestWikiIdentityClaimRedisOverridesStaleLocal(t *testing.T) {
 	batch := &WikiBatchContext{}
 	identity := normalizeWikiIdentityTitle("孔子")
 	batch.identityClaims.Store(types.WikiPageTypeEntity+"\x00"+identity, "entity/kong-zi")
-	if err := rdb.Set(ctx, wikiIdentityClaimPrefix+"kb-1:"+types.WikiPageTypeEntity+":"+identity, "entity/confucius", wikiIdentityClaimTTL).Err(); err != nil {
+	if err := rdb.Set(ctx, wikiIdentityClaimPrefix+"kb-1:"+types.WikiPageTypeEntity+":"+identity,
+		"entity/confucius", wikiIdentityClaimTTL(nil)).Err(); err != nil {
 		t.Fatalf("seed redis claim: %v", err)
 	}
 
@@ -590,7 +591,8 @@ func TestWikiIdentityClaimReplacesInvalidRedisValue(t *testing.T) {
 	svc := &wikiIngestService{redisClient: rdb}
 	ctx := context.Background()
 	identity := normalizeWikiIdentityTitle("孔子")
-	if err := rdb.Set(ctx, wikiIdentityClaimPrefix+"kb-1:"+types.WikiPageTypeEntity+":"+identity, "garbage", wikiIdentityClaimTTL).Err(); err != nil {
+	if err := rdb.Set(ctx, wikiIdentityClaimPrefix+"kb-1:"+types.WikiPageTypeEntity+":"+identity,
+		"garbage", wikiIdentityClaimTTL(nil)).Err(); err != nil {
 		t.Fatalf("seed invalid redis claim: %v", err)
 	}
 

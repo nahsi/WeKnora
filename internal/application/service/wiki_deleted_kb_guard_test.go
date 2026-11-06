@@ -80,13 +80,14 @@ func TestEnqueueWikiWorkSkipsDeletedKnowledgeBase(t *testing.T) {
 		{
 			name: "ingest",
 			run: func(ctx context.Context, task interfaces.TaskEnqueuer, repo interfaces.TaskPendingOpsRepository) {
-				EnqueueWikiIngest(ctx, task, repo, 7, "kb-deleted", "knowledge-1")
+				_, err := EnqueueWikiIngest(ctx, nil, task, repo, 7, "kb-deleted", "knowledge-1")
+				require.NoError(t, err)
 			},
 		},
 		{
 			name: "retract",
 			run: func(ctx context.Context, task interfaces.TaskEnqueuer, repo interfaces.TaskPendingOpsRepository) {
-				EnqueueWikiRetract(ctx, task, repo, WikiRetractPayload{
+				EnqueueWikiRetract(ctx, nil, task, repo, WikiRetractPayload{
 					TenantID: 7, KnowledgeBaseID: "kb-deleted", KnowledgeID: "knowledge-1",
 				})
 			},

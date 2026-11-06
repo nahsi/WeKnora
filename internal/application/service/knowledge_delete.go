@@ -279,7 +279,7 @@ func (s *knowledgeService) cleanupWikiReferences(
 	}
 	lang := types.LanguageFromContextOrDefault(ctx)
 	tenantID, _ := types.TenantIDFromContext(ctx)
-	if err := enqueueWikiRetract(ctx, s.task, s.taskPendingRepo, WikiRetractPayload{
+	if err := enqueueWikiRetract(ctx, s.config, s.task, s.taskPendingRepo, WikiRetractPayload{
 		TenantID: tenantID, KnowledgeBaseID: kbID, KnowledgeID: knowledgeID,
 		DocTitle: docTitle, DocSummary: docSummary, Language: lang,
 		PageSlugs: pageSlugs, FolderIDs: uniqueWikiFolderIDs(folderIDs),
