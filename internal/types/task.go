@@ -449,6 +449,7 @@ type KnowledgeListDeletePayload struct {
 	KnowledgeIDs    []string      `json:"knowledge_ids"`
 	Initiator       TaskInitiator `json:"initiator,omitempty"`
 	KnowledgeBaseID string        `json:"knowledge_base_id,omitempty"`
+	Language        string        `json:"language,omitempty"`
 }
 
 // KnowledgeListReparsePayload represents the batch knowledge reparse task payload

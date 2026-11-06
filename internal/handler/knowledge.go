@@ -250,6 +250,7 @@ func (h *KnowledgeHandler) enqueueKnowledgeListDelete(
 		TenantID:        tenantID,
 		KnowledgeIDs:    ids,
 		Initiator:       types.TaskInitiatorFromContext(ctx),
+		Language:        types.LanguageFromContextOrDefault(ctx),
 	}
 	langfuse.InjectTracing(ctx, &payload)
 	payloadBytes, err := json.Marshal(payload)
